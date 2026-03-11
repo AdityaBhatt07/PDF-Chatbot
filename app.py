@@ -5,9 +5,14 @@ from PyPDF2 import PdfReader
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import FAISS
-from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_community.chains import ConversationalRetrievalChain
-from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.messages import HumanMessage, AIMessage
+
+
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
 
 
 def main():
@@ -17,19 +22,19 @@ def main():
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-    if "conversation" not in st.session_state:
-        st.session_state.conversation = None
-    if "message_history" not in st.session_state:
-        st.session_state.message_history = ChatMessageHistory()
+    if "rag_chain" not in st.session_state:
+        st.session_state.rag_chain = None
 
     pdf = st.file_uploader("Upload your PDF", type="pdf")
 
     if pdf is not None:
+        # extract text
         pdf_reader = PdfReader(pdf)
         text = ""
         for page in pdf_reader.pages:
             text += page.extract_text()
 
+        # split into chunks
         text_splitter = CharacterTextSplitter(
             separator="\n",
             chunk_size=1000,
@@ -38,45 +43,68 @@ def main():
         )
         chunks = text_splitter.split_text(text)
 
+        # create embeddings
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-001",
             google_api_key=os.getenv("GOOGLE_API_KEY")
         )
         knowledge_base = FAISS.from_texts(chunks, embeddings)
+        retriever = knowledge_base.as_retriever()
 
+        # LLM
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.0-flash",
             google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0
         )
 
-        retriever = knowledge_base.as_retriever()
+        # prompt
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a helpful assistant. Answer the question using only the context below.
+If you don't know the answer, just say you don't know.
 
-        st.session_state.conversation = ConversationalRetrievalChain.from_llm(
-            llm=llm,
-            retriever=retriever,
-            return_source_documents=False
+Context:
+{context}"""),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{question}")
+        ])
+
+        # LCEL chain — no deprecated imports
+        st.session_state.rag_chain = (
+            {
+                "context": retriever | format_docs,
+                "question": RunnablePassthrough(),
+                "chat_history": RunnablePassthrough()
+            }
+            | prompt
+            | llm
+            | StrOutputParser()
         )
 
         st.success("✅ PDF processed! Ask your question below.")
 
+    # user input
     user_question = st.text_input("Ask a question about your PDF:")
 
-    if user_question and st.session_state.conversation is not None:
-        result = st.session_state.conversation({
-            "question": user_question,
-            "chat_history": st.session_state.chat_history
-        })
-        response = result["answer"]
-
-        st.session_state.chat_history.append(("You", user_question))
-        st.session_state.chat_history.append(("AI", response))
-
-    for role, message in st.session_state.chat_history:
-        if role == "You":
-            st.markdown(f"**🧑 You:** {message}")
+    if user_question:
+        if st.session_state.rag_chain is None:
+            st.warning("⚠️ Please upload a PDF first.")
         else:
-            st.markdown(f"**🤖 AI:** {message}")
+            with st.spinner("Thinking..."):
+                response = st.session_state.rag_chain.invoke({
+                    "question": user_question,
+                    "chat_history": st.session_state.chat_history
+                })
+
+            st.session_state.chat_history.append(HumanMessage(content=user_question))
+            st.session_state.chat_history.append(AIMessage(content=response))
+
+    # display chat history
+    for msg in st.session_state.chat_history:
+        if isinstance(msg, HumanMessage):
+            st.markdown(f"**🧑 You:** {msg.content}")
+        else:
+            st.markdown(f"**🤖 AI:** {msg.content}")
 
 
 if __name__ == '__main__':
