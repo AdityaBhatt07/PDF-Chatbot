@@ -73,7 +73,7 @@ def main():
         retriever = knowledge_base.as_retriever()
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             temperature=0
         )
 
