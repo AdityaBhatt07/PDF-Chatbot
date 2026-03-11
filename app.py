@@ -6,12 +6,37 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnableLambda
 from langchain_core.messages import HumanMessage, AIMessage
 
 
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
+
+
+def build_chain(retriever, llm):
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a helpful assistant. Answer the question using only the context below.
+If you don't know the answer, just say you don't know.
+
+Context:
+{context}"""),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{question}")
+    ])
+
+    chain = (
+        {
+            "context": RunnableLambda(lambda x: format_docs(retriever.invoke(x["question"]))),
+            "question": RunnableLambda(lambda x: x["question"]),
+            "chat_history": RunnableLambda(lambda x: x["chat_history"])
+        }
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    return chain
 
 
 def main():
@@ -41,7 +66,6 @@ def main():
         )
         chunks = text_splitter.split_text(text)
 
-        # models/embedding-001 — confirmed working with langchain-google-genai 1.0.x
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-001"
         )
@@ -53,27 +77,7 @@ def main():
             temperature=0
         )
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a helpful assistant. Answer the question using only the context below.
-If you don't know the answer, just say you don't know.
-
-Context:
-{context}"""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{question}")
-        ])
-
-        st.session_state.rag_chain = (
-            {
-                "context": retriever | format_docs,
-                "question": RunnablePassthrough(),
-                "chat_history": RunnablePassthrough()
-            }
-            | prompt
-            | llm
-            | StrOutputParser()
-        )
-
+        st.session_state.rag_chain = build_chain(retriever, llm)
         st.success("✅ PDF processed! Ask your question below.")
 
     user_question = st.text_input("Ask a question about your PDF:")
