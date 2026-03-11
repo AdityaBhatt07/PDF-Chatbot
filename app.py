@@ -1,4 +1,3 @@
-from dotenv import load_dotenv
 import os
 import streamlit as st
 from PyPDF2 import PdfReader
@@ -16,9 +15,10 @@ def format_docs(docs):
 
 
 def main():
-    load_dotenv()
     st.set_page_config(page_title="Ask your PDF")
     st.header("Ask your PDF 💬")
+
+    os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
@@ -41,16 +41,15 @@ def main():
         )
         chunks = text_splitter.split_text(text)
 
+        # models/embedding-001 — confirmed working with langchain-google-genai 1.0.x
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004",
-            google_api_key=os.getenv("GOOGLE_API_KEY")
+            model="models/embedding-001"
         )
         knowledge_base = FAISS.from_texts(chunks, embeddings)
         retriever = knowledge_base.as_retriever()
 
         llm = ChatGoogleGenerativeAI(
             model="gemini-1.5-flash",
-            google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0
         )
 
