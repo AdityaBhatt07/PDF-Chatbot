@@ -6,8 +6,8 @@ from langchain_text_splitters import CharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import FAISS
 from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
+from langchain_community.chains import ConversationalRetrievalChain
+from langchain_core.runnables.history import RunnableWithMessageHistory
 
 
 def main():
@@ -19,6 +19,8 @@ def main():
         st.session_state.chat_history = []
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
+    if "message_history" not in st.session_state:
+        st.session_state.message_history = ChatMessageHistory()
 
     pdf = st.file_uploader("Upload your PDF", type="pdf")
 
@@ -48,18 +50,11 @@ def main():
             temperature=0
         )
 
-        message_history = ChatMessageHistory()
-        memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            chat_memory=message_history,
-            return_messages=True,
-            output_key="answer"
-        )
+        retriever = knowledge_base.as_retriever()
 
         st.session_state.conversation = ConversationalRetrievalChain.from_llm(
             llm=llm,
-            retriever=knowledge_base.as_retriever(),
-            memory=memory,
+            retriever=retriever,
             return_source_documents=False
         )
 
@@ -68,7 +63,10 @@ def main():
     user_question = st.text_input("Ask a question about your PDF:")
 
     if user_question and st.session_state.conversation is not None:
-        result = st.session_state.conversation({"question": user_question})
+        result = st.session_state.conversation({
+            "question": user_question,
+            "chat_history": st.session_state.chat_history
+        })
         response = result["answer"]
 
         st.session_state.chat_history.append(("You", user_question))
