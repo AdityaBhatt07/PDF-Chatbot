@@ -43,7 +43,7 @@ def main():
 
         # models/embedding-001 — confirmed working with langchain-google-genai 1.0.x
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001"
+            model="models/gemini-embedding-001"
         )
         knowledge_base = FAISS.from_texts(chunks, embeddings)
         retriever = knowledge_base.as_retriever()
