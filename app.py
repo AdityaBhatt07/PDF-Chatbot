@@ -28,13 +28,11 @@ def main():
     pdf = st.file_uploader("Upload your PDF", type="pdf")
 
     if pdf is not None:
-        # extract text
         pdf_reader = PdfReader(pdf)
         text = ""
         for page in pdf_reader.pages:
             text += page.extract_text()
 
-        # split into chunks
         text_splitter = CharacterTextSplitter(
             separator="\n",
             chunk_size=1000,
@@ -43,22 +41,19 @@ def main():
         )
         chunks = text_splitter.split_text(text)
 
-        # create embeddings
         embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-001",
+            model="models/text-embedding-004",
             google_api_key=os.getenv("GOOGLE_API_KEY")
         )
         knowledge_base = FAISS.from_texts(chunks, embeddings)
         retriever = knowledge_base.as_retriever()
 
-        # LLM
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0
         )
 
-        # prompt
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a helpful assistant. Answer the question using only the context below.
 If you don't know the answer, just say you don't know.
@@ -69,7 +64,6 @@ Context:
             ("human", "{question}")
         ])
 
-        # LCEL chain — no deprecated imports
         st.session_state.rag_chain = (
             {
                 "context": retriever | format_docs,
@@ -83,7 +77,6 @@ Context:
 
         st.success("✅ PDF processed! Ask your question below.")
 
-    # user input
     user_question = st.text_input("Ask a question about your PDF:")
 
     if user_question:
@@ -99,7 +92,6 @@ Context:
             st.session_state.chat_history.append(HumanMessage(content=user_question))
             st.session_state.chat_history.append(AIMessage(content=response))
 
-    # display chat history
     for msg in st.session_state.chat_history:
         if isinstance(msg, HumanMessage):
             st.markdown(f"**🧑 You:** {msg.content}")
