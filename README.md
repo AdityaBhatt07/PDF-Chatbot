@@ -4,6 +4,16 @@ A simple and powerful **Streamlit-based RAG (Retrieval-Augmented Generation) app
 
 ---
 
+##  Screenshots
+
+### 🔹 Upload & Processing
+![Upload Screen](PDFChatbotImg1.png)
+
+### 🔹 Chat Interface
+![Chat Screen](PDFChatbotImg2.png)
+
+---
+
 ##  Features
 
 *  Upload any PDF file
@@ -31,9 +41,10 @@ A simple and powerful **Streamlit-based RAG (Retrieval-Augmented Generation) app
 .
 ├── app.py
 ├── requirements.txt
-└── README.md
+├── README.md
+├── PDFChatbotImg1.png
+└── PDFChatbotImg2.png
 ```
-
 ---
 
 ##  Installation
